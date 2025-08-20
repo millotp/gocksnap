@@ -128,7 +128,7 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 }
 
 // MatchSnapshot creates a new snapshot for the current test.
-// If the snapshot file is not found, or if the environment variable UPDATE_TESTS is set to "true", it will spawn a web server to allow the user to interactively select responses for the recorded requests.
+// If the snapshot file is not found, or if the environment variable UPDATE_GOCKSNAP is set to "true", it will spawn a web server to allow the user to interactively select responses for the recorded requests.
 // If the snapshot file is found, it will load the existing calls and register them with gock.
 // After all the calls are finished, the user should call the Finish method to save the snapshot / assert that all calls were mocked correctly.
 func MatchSnapshot(t *testing.T, snapshotName string) *Snapshot {
@@ -138,7 +138,7 @@ func MatchSnapshot(t *testing.T, snapshotName string) *Snapshot {
 		Calls:      []Call{},
 		testName:   t.Name(),
 		name:       snapshotName,
-		updateMode: os.Getenv("UPDATE_TESTS") == "true",
+		updateMode: os.Getenv("UPDATE_GOCKSNAP") == "true",
 		sseConns:   make(map[chan string]struct{}),
 	}
 
