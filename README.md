@@ -26,7 +26,7 @@ func TestWithHTTP(t *testing.T) {
 
 When running the test for the first time, the library will open a web server to select the response for each request:
 
-<img width="1040" height="871" alt="Screenshot 2025-08-20 at 19 10 35" src="https://github.com/user-attachments/assets/779bcb86-5943-4bfb-9e25-f0218e5595b3" />
+<img width="1040" height="871" alt="image1" src="https://github.com/user-attachments/assets/fb61570d-f308-4617-b14f-b727085fb73b" />
 
 Select the desired `status` and `response body` that should be returned for this request, and click `Save Snapshot`.
 
@@ -34,4 +34,4 @@ Select the desired `status` and `response body` that should be returned for this
 
 To edit an existing snapshot, you can run your test with the environment variable `UPDATE_GOCKSNAP=true`, a new button will appear to reuse the response from the existing snapshot:
 
-<img width="1039" height="334" alt="Screenshot 2025-08-20 at 19 13 16" src="https://github.com/user-attachments/assets/5105b67f-3509-4ac3-817a-423d34498e1a" />
+<img width="1039" height="334" alt="image2" src="https://github.com/user-attachments/assets/53d3ca42-7e0f-4a61-b319-e5997ef95edc" />
