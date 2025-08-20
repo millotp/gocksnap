@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Gocksnap Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
+            --accent: #2563eb;
+            --accent-hover: #1e40af;
+            --error: #dc2626;
+            --radius: 12px;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1.5rem;
+        }
+
+        .pill {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #1e3a8a;
+            border-radius: 999px;
+            padding: 0.25rem 0.75rem;
+            margin-right: 0.5rem;
+            font-size: 0.85rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        pre {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            white-space: pre-wrap;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            overflow-x: auto;
+        }
+
+        label {
+            display: block;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.6rem 0.75rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.9rem;
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 1.25rem;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: var(--radius);
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        #msg {
+            color: var(--muted);
+        }
+
+        #error {
+            color: var(--error);
+            margin-top: 0.5rem;
+        }
+
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 id="title">Gocksnap Console</h1>
+        <div id="content">
+            <p id="msg">No snapshot pending…</p>
+        </div>
+        <div class="footer">Keep this page open while running tests.</div>
+    </div>
+
+    <script>
+        (function () {
+            const eventSource = new EventSource('/events');
+            eventSource.onmessage = function (evt) {
+                if (evt.data === 'pending') fetchCurrent();
+            };
+            fetchCurrent();
+
+            function fetchCurrent() {
+                fetch('/current').then(function (res) {
+                    if (!res.ok) {
+                        document.getElementById('content').innerHTML = '<p id="msg">No snapshot pending…</p>';
+                        return;
+                    }
+                    return res.json().then(showForm);
+                });
+            }
+
+            function prettyBody(body) {
+                return body ? JSON.stringify(body, null, 2) : '';
+            }
+
+            function showForm(data) {
+                document.getElementById('title').textContent = "Snapshot for " + data.name;
+                let html = `
+                <div>
+                    <label>Incoming request:</label>
+                    <div class="card">
+                        <div>
+                            <span class="pill">${data.call.method}</span>
+                            <span class="pill">${data.call.url}</span>
+                        </div>
+                        <div>
+                            <label>Body</label>
+                            <pre>${prettyBody(data.call.reqBody)}</pre>
+                        </div>
+                    </div>
+                    <label>Expected response:</label>
+                    <form id="new" class="card">
+                        <label>Status Code</label>
+                        <input type="number" name="status" value="200" />
+                        <label>Response Body (JSON)</label>
+                        <textarea id="resBody" name="resBody" placeholder='Enter JSON'></textarea>
+                        <div id="error"></div>
+                        <button type="submit">Save Snapshot</button>
+                    </form>
+                </div>`;
+                if (data.existingCall) {
+                    html += `
+                    <h3>Existing Snapshot</h3>
+                    <div class="card" style="margin-top:1rem;">
+                        <p><b>Status:</b> ${data.existingCall.status}</p>
+                        <pre>${prettyBody(data.existingCall.resBody)}</pre>
+                        <form id="existing">
+                            <button type="submit">Use Existing</button>
+                        </form>
+                    </div>`;
+                }
+                document.getElementById('content').innerHTML = html;
+
+                document.getElementById('new').onsubmit = function (ev) {
+                    ev.preventDefault();
+                    const status = parseInt(document.querySelector('input[name="status"]').value || '200', 10);
+                    let resBody = document.getElementById('resBody').value || null;
+                    const errEl = document.getElementById('error');
+                    if (resBody) {
+                        try {
+                            resBody = JSON.parse(resBody);
+                        } catch (e) {
+                            errEl.textContent = 'Invalid JSON: ' + e.message;
+                            return;
+                        }
+                    }
+                    errEl.textContent = '';
+                    fetch('/new', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status, resBody }),
+                    }).then(function () {
+                        document.getElementById('content').innerHTML = '<p>✅ Snapshot saved. Waiting for the next one…</p>';
+                    });
+                };
+
+                if (data.existingCall) {
+                    document.getElementById('existing').onsubmit = function (ev) {
+                        ev.preventDefault();
+                        fetch('/existing', { method: 'POST' }).then(function () {
+                            document.getElementById('content').innerHTML = '<p>✅ Using existing snapshot. Waiting for the next one…</p>';
+                        });
+                    };
+                }
+            }
+        })();
+    </script>
+</body>
+
+</html>

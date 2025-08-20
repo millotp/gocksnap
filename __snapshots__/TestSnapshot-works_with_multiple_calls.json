@@ -1,0 +1,26 @@
+{
+  "calls": [
+    {
+      "method": "POST",
+      "url": "https://test.com",
+      "reqBody": {
+        "req1": "value"
+      },
+      "resBody": {
+        "res1": "data"
+      },
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "https://example.com",
+      "reqBody": {
+        "req2": "value"
+      },
+      "resBody": {
+        "res2": "data"
+      },
+      "status": 200
+    }
+  ]
+}

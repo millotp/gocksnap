@@ -1,0 +1,15 @@
+{
+  "calls": [
+    {
+      "method": "POST",
+      "url": "https://other.com",
+      "reqBody": {
+        "req3": "value"
+      },
+      "resBody": {
+        "res3": "data"
+      },
+      "status": 200
+    }
+  ]
+}
