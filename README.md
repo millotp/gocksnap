@@ -4,6 +4,8 @@ Jest-like snapshot built on top of [gock](https://github.com/h2non/gock).
 
 It allows you to record HTTP request for a test, select the response for each one and replay the snapshot in the test.
 
+Instead of having to manually register all the mocks, they will be discoverd automatically, so you don't need all the `gock.New` or `gock.Register` calls anymore !
+
 ## Example
 
 ```go
