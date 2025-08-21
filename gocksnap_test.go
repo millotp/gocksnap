@@ -33,7 +33,7 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("Unexpected response body: '%s'", body)
 	}
 
-	resp, err = c.Post("https://example.com", "application/json", strings.NewReader(`{"req2": "value"}`))
+	resp, err = c.Post("https://example.com?query1=test", "application/json", strings.NewReader(`{"req2": "value"}`))
 	if err != nil {
 		t.Fatalf("Failed to make second request: %v", err)
 	}

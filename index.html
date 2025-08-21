@@ -68,14 +68,22 @@
             overflow-x: auto;
         }
 
-        label {
+        .label {
             display: block;
             margin-top: 1rem;
             margin-bottom: 0.5rem;
             font-weight: 600;
         }
 
-        input,
+        .optional-row {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            width: max-content;
+            white-space: nowrap;
+        }
+
+        .large-input,
         textarea {
             width: 100%;
             box-sizing: border-box;
@@ -156,37 +164,88 @@
                 return body ? JSON.stringify(body, null, 2) : '';
             }
 
+            function createOptionalParamsDiv(id, label, items, existingItems) {
+                return `
+                <details>
+                    <summary>${label}</summary>
+                    <div id="${id}">
+                        ${items.map((item, i) => {
+                    const itemId = `${id}-${i}`;
+                    const checked = existingItems && existingItems[item.key]?.includes(item.value) ? 'checked' : '';
+                    return `
+                        <div class="optional-row">
+                            <input type="checkbox" id="${itemId}" ${checked} />
+                            <label for="${itemId}"><b>${item.key}</b></label>
+                            <span>:</span>
+                            <span>${item.value}</span>
+                        </div>`;
+                }).join('')}
+                    </div>
+                </details>`;
+            }
+
+            function getOptionalParams(id) {
+                const params = {};
+                document.querySelectorAll(`#${id} input[type="checkbox"]:checked`).forEach(el => {
+                    const label = el.nextElementSibling;
+                    const key = label.textContent.trim();
+                    const value = label.nextElementSibling.nextElementSibling.textContent.trim();
+                    if (params[key]) {
+                        params[key].push(value);
+                    } else {
+                        params[key] = [value];
+                    }
+                });
+                return params;
+            }
+
             function showForm(data) {
                 document.getElementById('title').textContent = "Snapshot for: " + data.name;
+                console.log('existingResponse', data.existingResponse);
+                let optionalFields = '';
+                if (data.request.headers) {
+                    optionalFields += createOptionalParamsDiv('headers', 'Headers', Object.entries(data.request.headers).map(([key, value]) => ({
+                        key,
+                        value: value.join(', ')
+                    })), data.existingResponse?.matchingHeaders);
+                }
+                if (data.request.queryParams) {
+                    optionalFields += createOptionalParamsDiv('queryParams', 'Query Parameters', Object.entries(data.request.queryParams).map(([key, value]) => ({
+                        key,
+                        value: value.join(', ')
+                    })), data.existingResponse?.matchingQueryParams);
+                }
+
                 let html = `
                 <div>
-                    <label>Incoming request:</label>
+                    <div class="label">Incoming request:</div>
                     <div class="card">
                         <div>
-                            <span class="pill">${data.call.method}</span>
-                            <span class="pill">${data.call.url}</span>
+                            <span class="pill">${data.request.method}</span>
+                            <span class="pill">${data.request.url}</span>
                         </div>
                         <div>
-                            <label>Body</label>
-                            <pre>${prettyBody(data.call.reqBody)}</pre>
+                            <label class="label">Body</label>
+                            <pre>${prettyBody(data.request.reqBody)}</pre>
                         </div>
+                        ${optionalFields}
                     </div>
-                    <label>Expected response:</label>
+                    <div class="cardLabel">Expected response:</div>
                     <form id="new" class="card">
-                        <label>Status Code</label>
-                        <input type="number" name="status" value="200" />
-                        <label>Response Body (JSON)</label>
+                        <label class="label">Status Code</label>
+                        <input class="large-input" type="number" name="status" value="200" />
+                        <label class="label">Response Body (JSON)</label>
                         <textarea id="resBody" name="resBody" placeholder='Enter JSON'></textarea>
                         <div id="error"></div>
                         <button type="submit">Save Snapshot</button>
                     </form>
                 </div>`;
-                if (data.existingCall) {
+                if (data.existingResponse) {
                     html += `
                     <h3>Existing Snapshot</h3>
                     <div class="card" style="margin-top:1rem;">
-                        <p><b>Status:</b> ${data.existingCall.status}</p>
-                        <pre>${prettyBody(data.existingCall.resBody)}</pre>
+                        <p><b>Status:</b> ${data.existingResponse.status}</p>
+                        <pre>${prettyBody(data.existingResponse.resBody)}</pre>
                         <form id="existing">
                             <button type="submit">Use Existing</button>
                         </form>
@@ -208,19 +267,34 @@
                         }
                     }
                     errEl.textContent = '';
+
                     fetch('/new', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status, resBody }),
+                        body: JSON.stringify({
+                            status,
+                            resBody,
+                            matchingHeaders: getOptionalParams('headers'),
+                            matchingQueryParams: getOptionalParams('queryParams'),
+                        }),
                     }).then(function () {
                         document.getElementById('content').innerHTML = '<p>✅ Snapshot saved. Waiting for the next one…</p>';
                     });
                 };
 
-                if (data.existingCall) {
+                if (data.existingResponse) {
                     document.getElementById('existing').onsubmit = function (ev) {
                         ev.preventDefault();
-                        fetch('/existing', { method: 'POST' }).then(function () {
+                        fetch('/existing', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                status: data.existingResponse.status,
+                                resBody: data.existingResponse.resBody,
+                                matchingHeaders: getOptionalParams('headers'),
+                                matchingQueryParams: getOptionalParams('queryParams'),
+                            }),
+                        }).then(function () {
                             document.getElementById('content').innerHTML = '<p>✅ Using existing snapshot. Waiting for the next one…</p>';
                         });
                     };

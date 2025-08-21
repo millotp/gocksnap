@@ -6,10 +6,20 @@
       "reqBody": {
         "req3": "value"
       },
+      "headers": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "status": 200,
       "resBody": {
         "res3": "data"
       },
-      "status": 200
+      "matchingHeaders": {
+        "Content-Type": [
+          "application/json"
+        ]
+      }
     }
   ]
 }

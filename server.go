@@ -13,11 +13,11 @@ type CallPrompt struct {
 	// Name is the name of the call, used for identification in the UI.
 	Name string `json:"name"`
 
-	// Call is the call that is being recorded.
-	Call Call `json:"call"`
+	// Request is the HTTP request that is being recorded.
+	Request Request `json:"request"`
 
-	// ExistingCall is an optional existing call that can be used to pre-fill the response.
-	ExistingCall *Call `json:"existingCall,omitempty"`
+	// ExistingResponse is an optional existing call that can be used to pre-fill the response.
+	ExistingResponse *MockedCall `json:"existingResponse,omitempty"`
 
 	// finalCall will contain the selected response for the pending call.
 	finalCall chan *Call
@@ -95,10 +95,7 @@ func (g *Snapshot) startPromptServer() (string, error) {
 
 	// submit the response for the pending call
 	mux.HandleFunc("/new", func(writer http.ResponseWriter, req *http.Request) {
-		var payload struct {
-			Status  int             `json:"status"`
-			ResBody json.RawMessage `json:"resBody"`
-		}
+		var payload MockedCall
 
 		err = json.NewDecoder(req.Body).Decode(&payload)
 		if err != nil {
@@ -111,11 +108,8 @@ func (g *Snapshot) startPromptServer() (string, error) {
 
 		if g.pending != nil {
 			g.pending.finalCall <- &Call{
-				Method:  g.pending.Call.Method,
-				URL:     g.pending.Call.URL,
-				ReqBody: g.pending.Call.ReqBody,
-				ResBody: payload.ResBody,
-				Status:  payload.Status,
+				Request:    g.pending.Request,
+				MockedCall: payload,
 			}
 
 			g.pending = nil
@@ -126,25 +120,39 @@ func (g *Snapshot) startPromptServer() (string, error) {
 		fmt.Fprint(writer, "ok")
 	})
 
-	// reuse an existing call for the pending call
-	mux.HandleFunc("/existing", func(writer http.ResponseWriter, _ *http.Request) {
+	// reuse an existing response for the pending call
+	mux.HandleFunc("/existing", func(writer http.ResponseWriter, req *http.Request) {
+		var payload MockedCall
+
+		err = json.NewDecoder(req.Body).Decode(&payload)
+		if err != nil {
+			http.Error(writer, "Invalid JSON payload", http.StatusBadRequest)
+
+			return
+		}
+
 		g.mu.Lock()
-		defer g.mu.Unlock()
 
 		if g.pending == nil {
 			http.Error(writer, "no snapshot pending", http.StatusNotFound)
+			g.mu.Unlock()
 
 			return
 		}
 
-		if g.pending.ExistingCall == nil {
-			http.Error(writer, "no existing call available", http.StatusNotFound)
+		if g.pending.ExistingResponse == nil {
+			http.Error(writer, "no existing response available", http.StatusNotFound)
+			g.mu.Unlock()
 
 			return
 		}
 
-		g.pending.finalCall <- g.pending.ExistingCall
+		g.pending.finalCall <- &Call{
+			Request:    g.pending.Request,
+			MockedCall: payload,
+		}
 		g.pending = nil
+		g.mu.Unlock()
 
 		fmt.Fprint(writer, "ok")
 	})

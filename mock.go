@@ -79,7 +79,7 @@ func (r *recordMocker) Response() *gock.Response {
 		return &gock.Response{}
 	}
 
-	body, err := json.Marshal(r.call.ResBody)
+	body, err := json.Marshal(r.call.MockedCall.Body)
 	if err != nil {
 		body = []byte(fmt.Sprintf("Error marshalling response: %v", err))
 	}

@@ -6,10 +6,20 @@
       "reqBody": {
         "req1": "value"
       },
+      "headers": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "status": 200,
       "resBody": {
         "res1": "data"
       },
-      "status": 200
+      "matchingHeaders": {
+        "Content-Type": [
+          "application/json"
+        ]
+      }
     },
     {
       "method": "POST",
@@ -17,10 +27,30 @@
       "reqBody": {
         "req2": "value"
       },
+      "headers": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "queryParams": {
+        "query1": [
+          "test"
+        ]
+      },
+      "status": 200,
       "resBody": {
         "res2": "data"
       },
-      "status": 200
+      "matchingHeaders": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "matchingQueryParams": {
+        "query1": [
+          "test"
+        ]
+      }
     }
   ]
 }

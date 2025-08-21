@@ -20,22 +20,40 @@ const defaultSnapshotDirectory = "__snapshots__"
 //go:embed index.html
 var indexHTML string
 
-// Call represents a single HTTP call in the snapshot.
-type Call struct {
+type Request struct {
 	// Method is the HTTP method of the call (GET, POST, etc.)
 	Method string `json:"method"`
 
-	// URL is the full URL of the call.
+	// URL is the full URL of the request.
 	URL string `json:"url"`
 
-	// ReqBody is the request body of the call, if any.
-	ReqBody json.RawMessage `json:"reqBody"`
+	// Body is the request body, if any.
+	Body json.RawMessage `json:"reqBody"`
 
-	// ResBody is the response body of the call, if any.
-	ResBody json.RawMessage `json:"resBody"`
+	// Headers is the request headers, if any.
+	Headers map[string][]string `json:"headers,omitempty"`
 
+	// QueryParams is the query parameters of the request, if any.
+	QueryParams map[string][]string `json:"queryParams,omitempty"`
+}
+
+type MockedCall struct {
 	// Status is the HTTP status code of the response.
 	Status int `json:"status"`
+	// Body is the response body , if any.
+	Body json.RawMessage `json:"resBody"`
+
+	// MatchingHeaders is a map of headers that should match the request.
+	MatchingHeaders map[string][]string `json:"matchingHeaders,omitempty"`
+
+	// MatchingQueryParams is a map of query parameters that should match the request.
+	MatchingQueryParams map[string][]string `json:"matchingQueryParams,omitempty"`
+}
+
+// Call represents a single HTTP call in the snapshot.
+type Call struct {
+	Request
+	MockedCall
 }
 
 // Snapshot holds the state of the snapshot being recorded, which can include multiple HTTP calls.
@@ -103,15 +121,23 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 
 	fmt.Printf("Request: %s %s\n", req.Method, req.URL.String())
 
+	queryParams := req.URL.Query()
+	urlWithoutQuery := req.URL
+	urlWithoutQuery.RawQuery = ""
+
+	finalCall := make(chan *Call, 1)
+
 	g.pending = &CallPrompt{
 		Name: g.name,
-		Call: Call{
-			Method:  req.Method,
-			URL:     req.URL.String(),
-			ReqBody: bodyRaw,
+		Request: Request{
+			Method:      req.Method,
+			URL:         urlWithoutQuery.String(),
+			Body:        bodyRaw,
+			Headers:     req.Header,
+			QueryParams: queryParams,
 		},
-		ExistingCall: existingCall,
-		finalCall:    make(chan *Call, 1),
+		ExistingResponse: &existingCall.MockedCall,
+		finalCall:        finalCall,
 	}
 
 	// notify SSE clients
@@ -124,7 +150,7 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 
 	g.mu.Unlock()
 
-	return <-g.pending.finalCall
+	return <-finalCall
 }
 
 // MatchSnapshot creates a new snapshot for the current test.
@@ -207,9 +233,15 @@ func MatchSnapshot(t *testing.T, snapshotName string) *Snapshot {
 
 	// Register existing calls into gock.
 	for _, call := range snapshot.Calls {
-		req := gock.NewRequest().URL(call.URL).JSON(call.ReqBody)
+		req := gock.NewRequest().URL(call.URL).JSON(call.Request.Body)
 		req.Method = strings.ToUpper(call.Method)
-		gock.Register(gock.NewMock(req, gock.NewResponse().Status(call.Status).JSON(call.ResBody)))
+		for key, values := range call.MockedCall.MatchingHeaders {
+			req.MatchHeader(key, strings.Join(values, ","))
+		}
+		for key, values := range call.MockedCall.MatchingQueryParams {
+			req.MatchParam(key, strings.Join(values, ","))
+		}
+		gock.Register(gock.NewMock(req, gock.NewResponse().Status(call.Status).JSON(call.MockedCall.Body)))
 	}
 
 	t.Logf("Loaded snapshot '%s' with %d calls", snapshot.file(), len(snapshot.Calls))
