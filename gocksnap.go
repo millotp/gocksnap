@@ -58,7 +58,8 @@ type Call struct {
 
 // Snapshot holds the state of the snapshot being recorded, which can include multiple HTTP calls.
 type Snapshot struct {
-	Calls []Call `json:"calls"`
+	Partial bool   `json:"partial,omitempty"`
+	Calls   []Call `json:"calls"`
 
 	// testName used to identify the snapshot file.
 	testName string
@@ -79,6 +80,44 @@ type Snapshot struct {
 	sseConns map[chan string]struct{}
 }
 
+func (g *Snapshot) sendMessage(msg string) {
+	for ch := range g.sseConns {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
+func (g *Snapshot) saveToFile(t *testing.T) {
+	t.Helper()
+
+	data, err := json.MarshalIndent(g, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal snapshot '%s': %v", g.name, err)
+	}
+
+	_ = os.MkdirAll(defaultSnapshotDirectory, 0o750)
+
+	err = os.WriteFile(g.file(), data, 0o600)
+	if err != nil {
+		t.Fatalf("Failed to save snapshot '%s': %v", g.name, err)
+	}
+}
+
+func (g *Snapshot) attemptToSavePartial(t *testing.T) {
+	t.Helper()
+
+	if !t.Failed() || !g.updateMode || len(g.Calls) == 0 {
+		return
+	}
+
+	g.sendMessage("failedPartial")
+
+	g.Partial = true
+	g.saveToFile(t)
+}
+
 // Finish
 func (g *Snapshot) Finish(t *testing.T) {
 	t.Helper()
@@ -92,17 +131,7 @@ func (g *Snapshot) Finish(t *testing.T) {
 	}
 
 	// Update snapshot
-	data, err := json.MarshalIndent(g, "", "  ")
-	if err != nil {
-		t.Fatalf("Failed to marshal snapshot '%s': %v", g.name, err)
-	}
-
-	_ = os.MkdirAll(defaultSnapshotDirectory, 0o750)
-
-	err = os.WriteFile(g.file(), data, 0o600)
-	if err != nil {
-		t.Fatalf("Failed to save snapshot '%s': %v", g.name, err)
-	}
+	g.saveToFile(t)
 }
 
 // file returns the path to the snapshot file.
@@ -136,7 +165,7 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 			Headers:     req.Header,
 			QueryParams: queryParams,
 		},
-		finalCall:        finalCall,
+		finalCall: finalCall,
 	}
 
 	if existingCall != nil {
@@ -144,12 +173,7 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 	}
 
 	// notify SSE clients
-	for ch := range g.sseConns {
-		select {
-		case ch <- "pending":
-		default:
-		}
-	}
+	g.sendMessage("pending")
 
 	g.mu.Unlock()
 
@@ -190,6 +214,11 @@ func MatchSnapshot(t *testing.T, snapshotName string) *Snapshot {
 			t.Fatalf("Failed to unmarshal snapshot '%s': %v", snapshot.file(), err)
 		}
 
+		if snapshot.Partial {
+			snapshot.updateMode = true
+			snapshot.Partial = false // reset partial flag for the new run
+		}
+
 		if snapshot.updateMode {
 			existingCalls = snapshot.Calls
 			snapshot.Calls = make([]Call, 0)
@@ -209,6 +238,8 @@ func MatchSnapshot(t *testing.T, snapshotName string) *Snapshot {
 	gock.Intercept()
 
 	if snapshot.updateMode {
+		t.Cleanup(func() { snapshot.attemptToSavePartial(t) })
+
 		var existingCall *Call
 		if len(existingCalls) > 0 {
 			existingCall = &existingCalls[0]
