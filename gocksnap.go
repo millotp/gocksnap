@@ -136,8 +136,11 @@ func (g *Snapshot) promptCall(req *http.Request, existingCall *Call) *Call {
 			Headers:     req.Header,
 			QueryParams: queryParams,
 		},
-		ExistingResponse: &existingCall.MockedCall,
 		finalCall:        finalCall,
+	}
+
+	if existingCall != nil {
+		g.pending.ExistingResponse = &existingCall.MockedCall
 	}
 
 	// notify SSE clients
